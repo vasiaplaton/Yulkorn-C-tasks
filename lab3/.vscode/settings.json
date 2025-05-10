@@ -5,6 +5,7 @@
         "cli.h": "c",
         "udt_list.h": "c",
         "stdio.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "chatgpt": "c"
     }
 }

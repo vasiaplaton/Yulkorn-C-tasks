@@ -37,6 +37,60 @@ Contents:
 int opPriority(char operation);
 bool opCommut(char operation);
 --------------------------------------------------
+Path: ./src/stack.c
+Contents:
+#include "stack.h"
+#include <stdlib.h>
+
+#define INITIAL_CAPACITY 16
+
+Stack createStack() {
+    Stack s = malloc(sizeof(_Stack));
+    s->capacity = INITIAL_CAPACITY;
+    s->elems    = malloc(sizeof(STACK_T) * s->capacity);
+    s->last     = 0;
+    return s;
+}
+
+void destroyStack(Stack s) {
+    free(s->elems);
+    free(s);
+}
+
+bool emptyStack(Stack s) {
+    return s->last == 0;
+}
+
+int depthStack(Stack s) {
+    return s->last;
+}
+
+void pushStack(Stack s, STACK_T t) {
+    if (s->last == s->capacity) {
+        int newCap = s->capacity * 2;
+        STACK_T *newArr = malloc(sizeof(STACK_T) * newCap);
+        for (int i = 0; i < s->capacity; i++) {
+            newArr[i] = s->elems[i];
+        }
+        free(s->elems);
+        s->elems    = newArr;
+        s->capacity = newCap;
+    }
+    s->elems[s->last++] = t;
+}
+
+STACK_T topStack(Stack s) {
+    if (emptyStack(s)) return NULL;
+    return s->elems[s->last - 1];
+}
+
+void popStack(Stack s) {
+    if (!emptyStack(s)) {
+        s->last--;
+    }
+}
+
+--------------------------------------------------
 Path: ./src/processTree.h
 Contents:
 #pragma once
@@ -166,6 +220,67 @@ void printExpression(Tree node);
 
 
 --------------------------------------------------
+Path: ./src/queue.c
+Contents:
+#include "queue.h"
+#include <stdlib.h>
+#include <string.h>
+
+#define INITIAL_CAPACITY 16
+
+Queue createQueue() {
+    Queue q = malloc(sizeof(_Queue));
+    q->capacity = INITIAL_CAPACITY;
+    q->elems     = malloc(sizeof(QUEUE_T) * q->capacity);
+    q->first     = 0;
+    q->last      = 0;
+    q->length    = 0;
+    return q;
+}
+
+void destroyQueue(Queue q) {
+    free(q->elems);
+    free(q);
+}
+
+bool emptyQueue(Queue q) {
+    return q->length == 0;
+}
+
+int lengthQueue(Queue q) {
+    return q->length;
+}
+
+void pushQueue(Queue q, QUEUE_T t) {
+    if (q->length == q->capacity) {
+        int newCap = q->capacity * 2;
+        QUEUE_T *newArr = malloc(sizeof(QUEUE_T) * newCap);
+        for (int i = 0; i < q->length; i++) {
+            newArr[i] = q->elems[(q->first + i) % q->capacity];
+        }
+        free(q->elems);
+        q->elems   = newArr;
+        q->capacity = newCap;
+        q->first    = 0;
+        q->last     = q->length;
+    }
+    q->elems[q->last] = t;
+    q->last = (q->last + 1) % q->capacity;
+    q->length++;
+}
+
+QUEUE_T frontQueue(Queue q) {
+    if (emptyQueue(q)) return NULL;
+    return q->elems[q->first];
+}
+
+void popQueue(Queue q) {
+    if (emptyQueue(q)) return;
+    q->first = (q->first + 1) % q->capacity;
+    q->length--;
+}
+
+--------------------------------------------------
 Path: ./src/treeBuilder.c
 Contents:
 #include "treeBuilder.h"
@@ -227,6 +342,9 @@ int main() {
 --------------------------------------------------
 Path: ./src/processTree.c
 Contents:
+Path: ./src/processTree.c
+Contents:
+#include <stdlib.h>      // для malloc/free
 #include "processTree.h"
 #include "token.h"
 #include "stackTree.h"
@@ -243,74 +361,130 @@ void classify(Tree root, StackTree nums, StackTree other) {
         return;
     }
 
-    // ...
-
+    // рекурсивно обходим дерево
     classify(root->left, nums, other);
     classify(root->right, nums, other);
 }
 
 Tree processTree(Tree root) {
+    if (root == NULL) return NULL;
     if (root->type == NUM || root->type == VAR) {
         return root;
     }
 
+    // 1) Дистрибутивность: VAR * (X - Y)
+    if (root->content[0] == '*') {
+        Tree A = root->left;
+        Tree B = root->right;
+        // VAR * (X - Y)
+        if (A->type == VAR && B->type == OP && B->content[0] == '-') {
+            // копии переменной
+            Tree v1 = createNode(VAR, A->content);
+            Tree v2 = createNode(VAR, A->content);
+            Tree L = processTree(B->left);
+            Tree R = processTree(B->right);
+            // (v1 * L)
+            Tree M1 = createNode(OP, "*");
+            M1->left  = v1;
+            M1->right = L;
+            // (v2 * R)
+            Tree M2 = createNode(OP, "*");
+            M2->left  = v2;
+            M2->right = R;
+            // (M1 - M2)
+            Tree D = createNode(OP, "-");
+            D->left  = M1;
+            D->right = M2;
+            // освобождаем старые узлы
+            deleteTree(A);
+            deleteTree(B);
+            free(root);
+            return D;
+        }
+        // (X - Y) * VAR
+        if (B->type == VAR && A->type == OP && A->content[0] == '-') {
+            Tree v1 = createNode(VAR, B->content);
+            Tree v2 = createNode(VAR, B->content);
+            Tree L = processTree(A->left);
+            Tree R = processTree(A->right);
+            Tree M1 = createNode(OP, "*");
+            M1->left  = L;
+            M1->right = v1;
+            Tree M2 = createNode(OP, "*");
+            M2->left  = R;
+            M2->right = v2;
+            Tree D = createNode(OP, "-");
+            D->left  = M1;
+            D->right = M2;
+            deleteTree(B);
+            deleteTree(A);
+            free(root);
+            return D;
+        }
+    }
+
+    // 2) Если не дистрибутивный случай, обрабатываем ветви
+    root->left  = processTree(root->left);
+    root->right = processTree(root->right);
+
+    // 3) Если это не умножение — возвращаем как есть
     if (root->content[0] != '*') {
-        root->left = processTree(root->left);
-        root->right = processTree(root->right);
         return root;
     }
 
-    StackTree nums = createStackTree();
+    // 4) Свёртка констант и ассоциативное объединение остальных множителей
+    StackTree nums  = createStackTree();
     StackTree other = createStackTree();
 
     classify(root, nums, other);
 
+    // перемножаем все числовые константы
     int factor = 1;
     while (!emptyStackTree(nums)) {
-        factor *= atoi(topStackTree(nums)->content);
-        deleteTree(topStackTree(nums));
+        Tree t = topStackTree(nums);
+        factor *= atoi(t->content);
+        deleteTree(t);
         popStackTree(nums);
     }
-    
+
+    // собираем «остальные» множители в одно дерево
     Tree otherProduct = NULL;
-
     while (!emptyStackTree(other)) {
-        Tree top = topStackTree(other);
-        // тут оставлена ошибка, найдите ее
+        Tree t = topStackTree(other);
         popStackTree(other);
-
         if (otherProduct == NULL) {
-            otherProduct = top;
+            otherProduct = t;
         } else {
             Tree node = createNode(OP, "*");
-            node->left = otherProduct;
-            node->right = top;
+            node->left  = otherProduct;
+            node->right = t;
             otherProduct = node;
         }
     }
 
     destroyStackTree(nums);
     destroyStackTree(other);
-    
-    char str[16];
-    sprintf(str, "%d", factor);
-    
-    Tree factorNode = createNode(NUM, str);
 
+    // создаём узел с итоговым числовым множителем
+    char buf[16];
+    sprintf(buf, "%d", factor);
+    Tree factorNode = createNode(NUM, buf);
+
+    // если нет других множителей — просто возвращаем число
     if (otherProduct == NULL) {
         return factorNode;
     }
-
+    // если множитель оказался 1 — возвращаем только остальные
     if (factor == 1) {
         return otherProduct;
     }
-
-    Tree node = createNode(OP, "*");
-    node->left = factorNode;
-    node->right = otherProduct;
-    
-    return node;
+    // иначе — создаём вершину умножения
+    Tree result = createNode(OP, "*");
+    result->left  = factorNode;
+    result->right = otherProduct;
+    return result;
 }
+
 --------------------------------------------------
 Path: ./src/stack.h
 Contents:
@@ -339,29 +513,77 @@ Path: ./src/operations.c
 Contents:
 #include "operations.h"
 
+// Приоритеты операций: + и - — 1, * и / — 2, всё остальное — 0
 int opPriority(char operation) {
-    switch (operation) {
-    case '+':
-        return 1;
-
-    case '*':
-        return 2;
-
-    // ...
+        switch (operation) {
+            case '+': case '-': return 1;
+            case '*': case '/': return 2;
+            default:            return 0;
+        }
     }
-}
-
+    
+    // Коммутативность: + и * — коммутативны, - и / — нет
 bool opCommut(char operation) {
-    switch (operation) {
-    case '+':
-        return true;
+        switch (operation) {
+            case '+': case '*': return true;
+            case '-': case '/': return false;
+            default:            return false;
+        }
+    }
+--------------------------------------------------
+Path: ./src/stackTree.c
+Contents:
+#include "stackTree.h"
+#include <stdlib.h>
 
-    case '-':
-        return false;
+#define INITIAL_CAPACITY 16
 
-    // ...
+StackTree createStackTree() {
+    StackTree s = malloc(sizeof(_StackTree));
+    s->capacity = INITIAL_CAPACITY;
+    s->elems    = malloc(sizeof(STACK_TREE_T) * s->capacity);
+    s->last     = 0;
+    return s;
+}
+
+void destroyStackTree(StackTree s) {
+    free(s->elems);
+    free(s);
+}
+
+bool emptyStackTree(StackTree s) {
+    return s->last == 0;
+}
+
+int depthStackTree(StackTree s) {
+    return s->last;
+}
+
+void pushStackTree(StackTree s, STACK_TREE_T t) {
+    if (s->last == s->capacity) {
+        int newCap = s->capacity * 2;
+        STACK_TREE_T *newArr = malloc(sizeof(STACK_TREE_T) * newCap);
+        for (int i = 0; i < s->capacity; i++) {
+            newArr[i] = s->elems[i];
+        }
+        free(s->elems);
+        s->elems    = newArr;
+        s->capacity = newCap;
+    }
+    s->elems[s->last++] = t;
+}
+
+STACK_TREE_T topStackTree(StackTree s) {
+    if (emptyStackTree(s)) return NULL;
+    return s->elems[s->last - 1];
+}
+
+void popStackTree(StackTree s) {
+    if (!emptyStackTree(s)) {
+        s->last--;
     }
 }
+
 --------------------------------------------------
 Path: ./src/lexer.h
 Contents:
@@ -431,5 +653,38 @@ void popQueue(Queue q);
 Path: ./src/tree.c
 Contents:
 #include "tree.h"
+#include "tree.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+Tree createNode(TokenType type, char *content) {
+    Tree node = malloc(sizeof(_Node));
+    node->type = type;
+    strcpy(node->content, content);
+    node->left = node->right = NULL;
+    return node;
+}
+
+void deleteTree(Tree node) {
+    if (!node) return;
+    deleteTree(node->left);
+    deleteTree(node->right);
+    free(node);
+}
+
+void printExpression(Tree node) {
+    if (!node) return;
+    // для операторов: (левый   оп   правый)
+    if (node->type == OP) {
+        printf("(");
+        printExpression(node->left);
+        printf("%s", node->content);
+        printExpression(node->right);
+        printf(")");
+    } else {
+        printf("%s", node->content);
+    }
+}
 
 --------------------------------------------------

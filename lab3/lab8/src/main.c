@@ -14,15 +14,33 @@ void printTree(Tree tree, int offset) {
     printTree(tree->left, offset + 1);
 }
 
+void printTokens(Queue q) {
+    printf("TOKENIZED:");
+    while (!emptyQueue(q)) {
+        Token t = frontQueue(q);
+        if (!t) break;
+        printf(" %s", t->content);
+        popQueue(q);
+    }
+    printf("\n");
+}
+
 int main() {
     char expr[64];
     fgets(expr, sizeof(expr), stdin);
+    printf("INPUT: %s\n", expr);
 
     Queue infix = tokenize(expr);
+    //printf("TOKENIZED: ");
+    //printTokens(infix); 
 
+    printf("\n");
+    printf("BUILDING TREE: \n");
     Tree tree = buildTree(infix);
 
     printTree(tree, 0);
+    printf("\n");
+    printf("PROCESSING TREE: \n");
 
     tree = processTree(tree);
 

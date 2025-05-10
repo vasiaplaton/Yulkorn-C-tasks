@@ -6,6 +6,8 @@ typedef enum TokenType {
     NUM,
     VAR,
     BR_OPEN,
+    OP,
+    BR_CLOSE,
     // ...
 } TokenType;
 
