@@ -1,0 +1,10 @@
+{
+    "files.associations": {
+        "sort_variant.h": "c",
+        "io_file.h": "c",
+        "cli.h": "c",
+        "udt_list.h": "c",
+        "stdio.h": "c",
+        "stdlib.h": "c"
+    }
+}

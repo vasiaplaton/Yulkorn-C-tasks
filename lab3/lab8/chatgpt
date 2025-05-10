@@ -1,0 +1,435 @@
+Path: ./Makefile
+Contents:
+
+--------------------------------------------------
+Path: ./chatgpt
+Contents:
+
+--------------------------------------------------
+Path: ./src/stackTree.h
+Contents:
+#pragma once
+#include <stdbool.h>
+#include <stdlib.h>
+#include "tree.h"
+
+typedef Tree STACK_TREE_T;
+
+typedef struct StackTree {
+    int last;
+    int capacity;
+    STACK_TREE_T *elems;
+} _StackTree, *StackTree;
+
+StackTree createStackTree();
+void destroyStackTree(StackTree q);
+bool emptyStackTree(StackTree q);
+int depthStackTree(StackTree q);
+void pushStackTree(StackTree q, STACK_TREE_T t);
+STACK_TREE_T topStackTree(StackTree q);
+void popStackTree(StackTree q);
+--------------------------------------------------
+Path: ./src/operations.h
+Contents:
+#pragma once
+#include <stdbool.h>
+
+int opPriority(char operation);
+bool opCommut(char operation);
+--------------------------------------------------
+Path: ./src/processTree.h
+Contents:
+#pragma once
+#include "tree.h"
+
+Tree processTree(Tree root);
+--------------------------------------------------
+Path: ./src/Makefile
+Contents:
+all: build run
+
+build: app.out
+
+app.out: operations.o token.o tree.o queue.o stack.o stackTree.o lexer.o treeBuilder.o processTree.o main.o
+	gcc operations.o token.o tree.o queue.o stack.o stackTree.o lexer.o treeBuilder.o processTree.o main.o -o app.out
+
+operations.o: operations.c
+	gcc -c operations.c -o operations.o
+
+token.o: token.c
+	gcc -c token.c -o token.o
+
+tree.o: tree.c
+	gcc -c tree.c -o tree.o
+
+queue.o: queue.c
+	gcc -c queue.c -o queue.o
+
+stack.o: stack.c
+	gcc -c stack.c -o stack.o
+
+stackTree.o: stackTree.c
+	gcc -c stackTree.c -o stackTree.o
+
+lexer.o: lexer.c
+	gcc -c lexer.c -o lexer.o
+
+treeBuilder.o: treeBuilder.c
+	gcc -c treeBuilder.c -o treeBuilder.o
+
+processTree.o: processTree.c
+	gcc -c processTree.c -o processTree.o
+
+main.o: main.c
+	gcc -c main.c -o main.o
+	
+run:
+	./app.out
+
+clean:
+	rm *.o
+--------------------------------------------------
+Path: ./src/lexer.c
+Contents:
+#include "lexer.h"
+
+typedef enum State {
+    INIT,
+    END,
+    // ...
+} State;
+
+Queue tokenize(char *expr) {
+    Queue out = createQueue();
+
+    int i = 0;
+    State st = INIT;
+
+    char numBuf[16];
+    int bufPos = 0;
+
+    while (st != END) {
+        if (st == INIT) {
+            char letter = expr[i];
+            
+            if ('a' <= letter && letter <= 'z') {
+                char c[2];
+                c[0] = letter;
+                c[1] = '\0';
+
+                pushQueue(out, createToken(c, VAR));
+                i++;
+            }
+
+            // ...
+        } 
+    }
+
+    return out;
+}
+--------------------------------------------------
+Path: ./src/token.c
+Contents:
+#include "token.h"
+
+Token createToken(char *content, TokenType type) {
+    Token res = malloc(sizeof(_Token));
+    
+    strcpy(res->content, content);
+    res->type = type;
+
+    return res;
+}
+
+void deleteToken(Token token) {
+    free(token);
+}
+
+
+--------------------------------------------------
+Path: ./src/tree.h
+Contents:
+#pragma once
+#include "token.h"
+
+typedef struct _Node {
+    TokenType type;
+    char content[16];
+
+    struct _Node *left;
+    struct _Node *right;
+} _Node, *Tree;
+
+Tree createNode(TokenType type, char *content);
+void deleteTree(Tree node);
+void printExpression(Tree node);
+
+
+--------------------------------------------------
+Path: ./src/treeBuilder.c
+Contents:
+#include "treeBuilder.h"
+#include "operations.h"
+#include <stdio.h>
+
+Queue toPostfix(Queue infix) {
+    // ...
+}
+
+Tree buildTree(Queue infix) {
+    Queue postfix = toPostfix(infix);
+
+    // ...
+}
+--------------------------------------------------
+Path: ./src/main.c
+Contents:
+#include <stdio.h>
+#include "lexer.h"
+#include "treeBuilder.h"
+#include "processTree.h"
+
+void printTree(Tree tree, int offset) {
+    if (tree == NULL) return;
+
+    printTree(tree->right, offset + 1);
+
+    for (int i = 0; i < offset; i++) printf("  ");
+    printf("%s\n", tree->content);
+
+    printTree(tree->left, offset + 1);
+}
+
+int main() {
+    char expr[64];
+    fgets(expr, sizeof(expr), stdin);
+
+    Queue infix = tokenize(expr);
+
+    Tree tree = buildTree(infix);
+
+    printTree(tree, 0);
+
+    tree = processTree(tree);
+
+    printf("PROCESSED: \n");
+
+    printTree(tree, 0);
+
+    printExpression(tree);
+    printf("\n");
+
+    deleteTree(tree);
+    
+    return 0;
+}
+
+--------------------------------------------------
+Path: ./src/processTree.c
+Contents:
+#include "processTree.h"
+#include "token.h"
+#include "stackTree.h"
+#include <stdio.h>
+
+void classify(Tree root, StackTree nums, StackTree other) {
+    if (root->type == NUM) {
+        pushStackTree(nums, root);
+        return;
+    }
+
+    if (root->type == VAR) {
+        pushStackTree(other, root);
+        return;
+    }
+
+    // ...
+
+    classify(root->left, nums, other);
+    classify(root->right, nums, other);
+}
+
+Tree processTree(Tree root) {
+    if (root->type == NUM || root->type == VAR) {
+        return root;
+    }
+
+    if (root->content[0] != '*') {
+        root->left = processTree(root->left);
+        root->right = processTree(root->right);
+        return root;
+    }
+
+    StackTree nums = createStackTree();
+    StackTree other = createStackTree();
+
+    classify(root, nums, other);
+
+    int factor = 1;
+    while (!emptyStackTree(nums)) {
+        factor *= atoi(topStackTree(nums)->content);
+        deleteTree(topStackTree(nums));
+        popStackTree(nums);
+    }
+    
+    Tree otherProduct = NULL;
+
+    while (!emptyStackTree(other)) {
+        Tree top = topStackTree(other);
+        // тут оставлена ошибка, найдите ее
+        popStackTree(other);
+
+        if (otherProduct == NULL) {
+            otherProduct = top;
+        } else {
+            Tree node = createNode(OP, "*");
+            node->left = otherProduct;
+            node->right = top;
+            otherProduct = node;
+        }
+    }
+
+    destroyStackTree(nums);
+    destroyStackTree(other);
+    
+    char str[16];
+    sprintf(str, "%d", factor);
+    
+    Tree factorNode = createNode(NUM, str);
+
+    if (otherProduct == NULL) {
+        return factorNode;
+    }
+
+    if (factor == 1) {
+        return otherProduct;
+    }
+
+    Tree node = createNode(OP, "*");
+    node->left = factorNode;
+    node->right = otherProduct;
+    
+    return node;
+}
+--------------------------------------------------
+Path: ./src/stack.h
+Contents:
+#pragma once
+#include <stdbool.h>
+#include <stdlib.h>
+#include "token.h"
+
+typedef Token STACK_T;
+
+typedef struct Stack {
+    int last;
+    int capacity;
+    STACK_T *elems;
+} _Stack, *Stack;
+
+Stack createStack();
+void destroyStack(Stack q);
+bool emptyStack(Stack q);
+int depthStack(Stack q);
+void pushStack(Stack q, STACK_T t);
+STACK_T topStack(Stack q);
+void popStack(Stack q);
+--------------------------------------------------
+Path: ./src/operations.c
+Contents:
+#include "operations.h"
+
+int opPriority(char operation) {
+    switch (operation) {
+    case '+':
+        return 1;
+
+    case '*':
+        return 2;
+
+    // ...
+    }
+}
+
+bool opCommut(char operation) {
+    switch (operation) {
+    case '+':
+        return true;
+
+    case '-':
+        return false;
+
+    // ...
+    }
+}
+--------------------------------------------------
+Path: ./src/lexer.h
+Contents:
+#pragma once
+#include "queue.h"
+
+Queue tokenize(char *expr);
+--------------------------------------------------
+Path: ./src/token.h
+Contents:
+#pragma once
+#include <stdlib.h>
+#include <string.h>
+
+typedef enum TokenType {
+    NUM,
+    VAR,
+    BR_OPEN,
+    // ...
+} TokenType;
+
+typedef struct _Token {
+    char content[16];
+    TokenType type;
+} _Token, *Token;
+
+Token createToken(char *content, TokenType type);
+void deleteToken(Token token);
+
+--------------------------------------------------
+Path: ./src/treeBuilder.h
+Contents:
+#pragma once
+#include "token.h"
+#include "tree.h"
+#include "queue.h"
+#include "stack.h"
+#include "stackTree.h"
+
+Tree buildTree(Queue infix); 
+--------------------------------------------------
+Path: ./src/queue.h
+Contents:
+#pragma once
+#include <stdbool.h>
+#include <stdlib.h>
+#include "token.h"
+
+typedef Token QUEUE_T;
+
+typedef struct Queue {
+    int first;
+    int last;
+    int length;
+    int capacity;
+    QUEUE_T *elems;
+} _Queue, *Queue;
+
+Queue createQueue();
+void destroyQueue(Queue q);
+bool emptyQueue(Queue q);
+int lengthQueue(Queue q);
+void pushQueue(Queue q, QUEUE_T t);
+QUEUE_T frontQueue(Queue q);
+void popQueue(Queue q);
+--------------------------------------------------
+Path: ./src/tree.c
+Contents:
+#include "tree.h"
+
+--------------------------------------------------
